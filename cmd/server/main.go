@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/esdras/goexpert-desafio-8-cloud-run/internal/weather"
+	"github.com/maiconpereira/desafio-go-gcloud-run/internal/weather"
 )
 
 func main() {
