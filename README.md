@@ -1,33 +1,25 @@
-# Desafio 8 - Cloud Run
+# Desafio Go — Cloud Run
 
-API em Go que recebe um CEP brasileiro de 8 dígitos, consulta a cidade no ViaCEP e retorna a temperatura atual usando WeatherAPI em Celsius, Fahrenheit e Kelvin.
-
-O projeto foi preparado para rodar localmente, em Docker e no Google Cloud Run. A imagem final usa `scratch`, certificados HTTPS e usuário não-root.
+API em Go que recebe um CEP brasileiro de 8 dígitos, consulta a cidade no ViaCEP e retorna a temperatura atual via WeatherAPI em Celsius, Fahrenheit e Kelvin.
 
 ## URL Cloud Run
 
 ```text
-https://desafio-go-gcloud-run-esdras-santos-375082332631.southamerica-east1.run.app/weather/01001000
+https://desafio-go-gcloud-run-<PROJECT_NUMBER>.southamerica-east1.run.app
 ```
 
-URL base:
+Exemplo de uso:
 
 ```text
-https://desafio-go-gcloud-run-esdras-santos-375082332631.southamerica-east1.run.app
+https://desafio-go-gcloud-run-<PROJECT_NUMBER>.southamerica-east1.run.app/weather/01001000
 ```
 
-## Contrato
+## Contrato da API
 
-### Sucesso
-
-```http
-GET /weather/01001000
-```
-
-Endpoint compatível:
+### Sucesso — HTTP 200
 
 ```http
-GET /temperatures/01001000
+GET /weather/{cep}
 ```
 
 ```json
@@ -38,10 +30,16 @@ GET /temperatures/01001000
 }
 ```
 
-Também é possível consultar por query string:
+Também aceita query string:
 
 ```http
 GET /weather?zipcode=01001000
+```
+
+Endpoint alternativo compatível:
+
+```http
+GET /temperatures/{cep}
 ```
 
 Health check:
@@ -50,40 +48,41 @@ Health check:
 GET /health-check
 ```
 
-### Erros
+### CEP inválido — HTTP 422
 
-CEP inválido:
+Formato inválido (não tem 8 dígitos ou contém letras):
 
 ```text
-HTTP 422
 invalid zipcode
 ```
 
-CEP não encontrado:
+### CEP não encontrado — HTTP 404
+
+Formato correto, mas não existe na base ViaCEP:
 
 ```text
-HTTP 404
 can not find zipcode
 ```
 
 ## Variáveis de ambiente
 
-```bash
-PORT=8080
-WEATHER_API_KEY=sua_chave_weatherapi
-```
-
-`WEATHER_API_KEY` é obrigatória para consultar a temperatura na WeatherAPI.
+| Variável | Obrigatória | Descrição |
+|---|---|---|
+| `PORT` | não | Porta HTTP (padrão: `8080`) |
+| `WEATHER_API_KEY` | sim | Chave da [WeatherAPI](https://www.weatherapi.com/) |
+| `VIACEP_BASE_URL` | não | URL base do ViaCEP (padrão já configurado) |
+| `WEATHER_BASE_URL` | não | URL base da WeatherAPI (padrão já configurado) |
 
 ## Rodando localmente
 
 ```bash
 cp .env.example .env
+# Edite .env e preencha WEATHER_API_KEY
 export $(grep -v '^#' .env | xargs)
 go run ./cmd/server
 ```
 
-Teste a API:
+Teste:
 
 ```bash
 curl http://localhost:8080/weather/01001000
@@ -92,11 +91,11 @@ curl http://localhost:8080/weather/01001000
 ## Rodando com Docker
 
 ```bash
-docker build -t desafio-8-cloud-run .
-docker run --rm -p 8080:8080 -e WEATHER_API_KEY=sua_chave_weatherapi desafio-8-cloud-run
+docker build -t desafio-go-gcloud-run .
+docker run --rm -p 8080:8080 -e WEATHER_API_KEY=sua_chave desafio-go-gcloud-run
 ```
 
-Teste a API:
+Teste:
 
 ```bash
 curl http://localhost:8080/weather/01001000
@@ -106,7 +105,7 @@ curl http://localhost:8080/weather/01001000
 
 ```bash
 cp .env.example .env
-export $(grep -v '^#' .env | xargs)
+# Edite .env e preencha WEATHER_API_KEY
 docker compose up --build
 ```
 
@@ -118,50 +117,33 @@ go test ./...
 
 ## Deploy no Google Cloud Run
 
-### Instalando o gcloud no Ubuntu
+### Pré-requisitos
 
-Se o comando `gcloud` não existir, instale o Google Cloud CLI:
+- [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) instalado e autenticado
+- Projeto GCP criado
 
-```bash
-sudo apt-get update
-sudo apt-get install -y apt-transport-https ca-certificates gnupg curl
-
-curl https://packages.cloud.google.com/apt/doc/apt-key.gpg \
-  | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
-
-echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
-  | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list
-
-sudo apt-get update
-sudo apt-get install -y google-cloud-cli
-```
-
-Faça login:
-
-```bash
-gcloud init
-gcloud auth login
-```
-
-### Deploy com Cloud Build
-
-Ative as APIs necessárias:
+### Configuração inicial
 
 ```bash
 gcloud config set project SEU_PROJECT_ID
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
+
+gcloud services enable \
+  run.googleapis.com \
+  cloudbuild.googleapis.com \
+  artifactregistry.googleapis.com \
+  secretmanager.googleapis.com
 ```
 
 Crie o repositório Docker no Artifact Registry:
 
 ```bash
-gcloud artifacts repositories create desafio-8 \
+gcloud artifacts repositories create desafio-go \
   --repository-format=docker \
-  --location=us-central1 \
-  --description="Imagens Docker do Desafio 8"
+  --location=southamerica-east1 \
+  --description="Imagens Docker do desafio Cloud Run"
 ```
 
-Crie o secret com a chave da WeatherAPI:
+Armazene a chave da WeatherAPI no Secret Manager:
 
 ```bash
 echo -n "sua_chave_weatherapi" | gcloud secrets create weather-api-key --data-file=-
@@ -177,7 +159,7 @@ gcloud secrets add-iam-policy-binding weather-api-key \
   --role="roles/secretmanager.secretAccessor"
 ```
 
-Permita que o Cloud Build faça deploy no Cloud Run:
+Permita que o Cloud Build faça deploy:
 
 ```bash
 gcloud projects add-iam-policy-binding SEU_PROJECT_ID \
@@ -193,54 +175,33 @@ gcloud projects add-iam-policy-binding SEU_PROJECT_ID \
   --role="roles/iam.serviceAccountUser"
 ```
 
-Execute o pipeline:
+### Deploy manual via Cloud Build
 
 ```bash
 gcloud builds submit --config cloudbuild.yaml \
-  --substitutions=_REGION=us-central1,_REPOSITORY=desafio-8,_SERVICE_NAME=desafio-8-cloud-run,_WEATHER_API_SECRET=weather-api-key
+  --substitutions=_REGION=southamerica-east1,_REPOSITORY=desafio-go,_SERVICE_NAME=desafio-go-gcloud-run,_WEATHER_API_SECRET=weather-api-key
 ```
 
-Ao final, o Cloud Build mostra a URL publicada. Teste:
+Ao final, o Cloud Build exibe a URL da aplicação.
 
-```bash
-curl https://desafio-go-gcloud-run-esdras-santos-375082332631.southamerica-east1.run.app/weather/01001000
-```
+### Trigger automático (CI/CD)
 
-Resposta esperada:
-
-```json
-{
-  "temp_C": 21,
-  "temp_F": 69.8,
-  "temp_K": 294.15
-}
-```
-
-### Trigger pelo repositório
-
-Se você criou um trigger no Cloud Build usando a opção **Dockerfile**, ele vai apenas construir a imagem. Para este projeto, use a opção **Cloud Build configuration file** apontando para:
-
-```text
-cloudbuild.yaml
-```
-
-Configuração recomendada do trigger:
+Configure um trigger no Cloud Build:
 
 ```text
 Event: Push to a branch
 Branch: ^main$
 Configuration: Cloud Build configuration file
-Location: Repository
 Cloud Build configuration file location: cloudbuild.yaml
 ```
 
-Substitution variables do trigger:
+Substitution variables:
 
 ```text
-_REGION=us-central1
-_REPOSITORY=desafio-8
-_SERVICE_NAME=desafio-8-cloud-run
+_REGION=southamerica-east1
+_REPOSITORY=desafio-go
+_SERVICE_NAME=desafio-go-gcloud-run
 _WEATHER_API_SECRET=weather-api-key
 ```
 
-Com essa configuração, cada push na branch `main` executa testes, build da imagem Docker, push para o Artifact Registry e deploy no Cloud Run.
+Com essa configuração, cada push na branch `main` executa testes, build da imagem, push para o Artifact Registry e deploy no Cloud Run automaticamente.
