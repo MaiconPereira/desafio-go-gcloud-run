@@ -5,13 +5,13 @@ API em Go que recebe um CEP brasileiro de 8 dígitos, consulta a cidade no ViaCE
 ## URL Cloud Run
 
 ```text
-https://desafio-go-gcloud-run-<PROJECT_NUMBER>.southamerica-east1.run.app
+https://desafio-go-gcloud-run-33238867170.southamerica-east1.run.app
 ```
 
 Exemplo de uso:
 
 ```text
-https://desafio-go-gcloud-run-<PROJECT_NUMBER>.southamerica-east1.run.app/weather/01001000
+https://desafio-go-gcloud-run-33238867170.southamerica-east1.run.app/weather/01001000
 ```
 
 ## Contrato da API
